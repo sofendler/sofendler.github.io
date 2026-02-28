@@ -166,6 +166,36 @@
       color: #888;
     }
 
+    .stars {
+      display: flex;
+      gap: 0.15rem;
+      flex-shrink: 0;
+    }
+
+    .star {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 0.1rem;
+      color: #2a2a2a;
+      transition: color 0.15s, transform 0.1s;
+    }
+
+    .star.filled {
+      color: #c8a84b;
+    }
+
+    .star:hover,
+    .stars:hover .star {
+      color: #444;
+    }
+
+    .stars:hover .star.hover-active {
+      color: #c8a84b;
+    }
+
     .empty {
       max-width: 680px;
       margin: 0 auto;
@@ -245,6 +275,37 @@
         a.target = '_blank';
         a.rel = 'noopener noreferrer';
 
+        // Stars rating
+        const stars = document.createElement('div');
+        stars.className = 'stars';
+
+        for (let s = 1; s <= 5; s++) {
+          const star = document.createElement('button');
+          star.className = 'star' + (s <= (item.rating || 0) ? ' filled' : '');
+          star.textContent = '★';
+          star.title = s + ' étoile' + (s > 1 ? 's' : '');
+          star.dataset.value = s;
+
+          star.addEventListener('mouseenter', () => {
+            stars.querySelectorAll('.star').forEach(st => {
+              st.classList.remove('hover-active');
+              if (Number(st.dataset.value) <= s) st.classList.add('hover-active');
+            });
+          });
+          star.addEventListener('mouseleave', () => {
+            stars.querySelectorAll('.star').forEach(st => st.classList.remove('hover-active'));
+          });
+          star.addEventListener('click', () => {
+            const links = load();
+            // Click same rating again → reset to 0
+            links[index].rating = links[index].rating === s ? 0 : s;
+            save(links);
+            render();
+          });
+
+          stars.appendChild(star);
+        }
+
         const del = document.createElement('button');
         del.className = 'delete-btn';
         del.textContent = '×';
@@ -256,6 +317,7 @@
           render();
         });
 
+        li.appendChild(stars);
         li.appendChild(label);
         li.appendChild(a);
         li.appendChild(del);
@@ -277,7 +339,7 @@
 
       errorEl.textContent = '';
       const links = load();
-      links.push({ label, url });
+      links.push({ label, url, rating: 0 });
       save(links);
       form.reset();
       render();
