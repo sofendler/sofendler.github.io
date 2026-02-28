@@ -81,7 +81,7 @@
       color: #888;
     }
 
-    input[type="number"],
+    input[type="text"],
     select {
       background: transparent;
       border: none;
@@ -98,12 +98,12 @@
       -webkit-appearance: none;
     }
 
-    input[type="number"]:focus,
+    input[type="text"]:focus,
     select:focus {
       border-bottom-color: #fff;
     }
 
-    input[type="number"]::placeholder {
+    input[type="text"]::placeholder {
       color: #333;
     }
 
@@ -270,7 +270,7 @@
 
       <div class="field">
         <label for="revenu">Revenu net annuel (€)</label>
-        <input type="number" id="revenu" placeholder="Ex : 35 000" min="0" step="100">
+        <input type="text" id="revenu" placeholder="Ex : 35 000" inputmode="numeric" autocomplete="off">
       </div>
 
       <div class="field">
@@ -377,7 +377,7 @@
     }
 
     function calculer() {
-      const revenuNet = parseFloat(document.getElementById('revenu').value);
+      const revenuNet = parseFloat(document.getElementById('revenu').value.replace(/\s/g, ''));
       if (!revenuNet || revenuNet <= 0) {
         alert('Veuillez saisir un revenu net annuel valide.');
         return;
@@ -454,6 +454,13 @@
       results.classList.add('visible');
       results.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+
+    // Format revenue input with thousand separators as the user types
+    document.getElementById('revenu').addEventListener('input', function () {
+      const digits = this.value.replace(/\D/g, '');
+      if (digits === '') { this.value = ''; return; }
+      this.value = parseInt(digits, 10).toLocaleString('fr-FR');
+    });
 
     // Allow Enter key to trigger calculation
     document.addEventListener('keydown', e => {
