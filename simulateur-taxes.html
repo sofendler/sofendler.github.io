@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulateur d'impôt — sofendler</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      background: #0f0f0f;
+      font-family: 'Segoe UI', sans-serif;
+      color: #ffffff;
+      padding: 3rem 1.5rem;
+    }
+
+    a.back {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: #888;
+      text-decoration: none;
+      font-size: 0.85rem;
+      letter-spacing: 0.1em;
+      transition: color 0.2s;
+    }
+
+    a.back:hover { color: #fff; }
+
+    a.back::before {
+      content: '←';
+      font-size: 1rem;
+    }
+
+    header {
+      margin-top: 2.5rem;
+      margin-bottom: 3rem;
+    }
+
+    h1 {
+      font-size: 2.2rem;
+      font-weight: 300;
+      letter-spacing: 0.15em;
+      color: #ffffff;
+    }
+
+    .subtitle {
+      color: #555;
+      font-size: 0.8rem;
+      letter-spacing: 0.12em;
+      margin-top: 0.5rem;
+      text-transform: uppercase;
+    }
+
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    /* ── Form ── */
+    .form-section {
+      display: grid;
+      gap: 2rem;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    label {
+      font-size: 0.75rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #888;
+    }
+
+    input[type="number"],
+    select {
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid #2a2a2a;
+      color: #fff;
+      font-family: 'Segoe UI', sans-serif;
+      font-size: 1.15rem;
+      font-weight: 300;
+      padding: 0.5rem 0;
+      width: 100%;
+      outline: none;
+      transition: border-color 0.2s;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+
+    input[type="number"]:focus,
+    select:focus {
+      border-bottom-color: #fff;
+    }
+
+    input[type="number"]::placeholder {
+      color: #333;
+    }
+
+    select option {
+      background: #1a1a1a;
+      color: #fff;
+    }
+
+    .radio-group {
+      display: flex;
+      gap: 2rem;
+      margin-top: 0.2rem;
+    }
+
+    .radio-group label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+      letter-spacing: 0.05em;
+      text-transform: none;
+      color: #aaa;
+      transition: color 0.2s;
+    }
+
+    .radio-group label:hover { color: #fff; }
+
+    .radio-group input[type="radio"] {
+      width: 14px;
+      height: 14px;
+      accent-color: #fff;
+      cursor: pointer;
+    }
+
+    .radio-group input[type="radio"]:checked + span {
+      color: #fff;
+    }
+
+    button {
+      margin-top: 1rem;
+      background: transparent;
+      border: 1px solid #333;
+      color: #fff;
+      font-family: 'Segoe UI', sans-serif;
+      font-size: 0.8rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      padding: 0.9rem 2.5rem;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      align-self: flex-start;
+    }
+
+    button:hover {
+      border-color: #fff;
+      background: rgba(255,255,255,0.04);
+    }
+
+    /* ── Results ── */
+    #results {
+      display: none;
+      margin-top: 3.5rem;
+      padding-top: 3rem;
+      border-top: 1px solid #1e1e1e;
+    }
+
+    #results.visible { display: block; }
+
+    .results-title {
+      font-size: 0.72rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #555;
+      margin-bottom: 2rem;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 2rem;
+      margin-bottom: 3rem;
+    }
+
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .stat-label {
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #555;
+    }
+
+    .stat-value {
+      font-size: 1.6rem;
+      font-weight: 300;
+      letter-spacing: 0.05em;
+      color: #fff;
+    }
+
+    .stat-value.accent { color: #7eb8f7; }
+    .stat-value.muted { color: #888; font-size: 1.2rem; }
+
+    /* ── Brackets table ── */
+    .brackets-title {
+      font-size: 0.72rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #555;
+      margin-bottom: 1.2rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+
+    th {
+      text-align: left;
+      padding: 0.6rem 0.8rem;
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #444;
+      border-bottom: 1px solid #1e1e1e;
+    }
+
+    td {
+      padding: 0.7rem 0.8rem;
+      color: #bbb;
+      border-bottom: 1px solid #171717;
+    }
+
+    td:last-child { text-align: right; color: #fff; }
+
+    tr.active td { color: #fff; }
+    tr.active td:first-child { color: #7eb8f7; }
+
+    .note {
+      margin-top: 2.5rem;
+      font-size: 0.72rem;
+      color: #3a3a3a;
+      letter-spacing: 0.05em;
+      line-height: 1.7;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <a href="index.html" class="back">Accueil</a>
+
+    <header>
+      <h1>Simulateur d'impôt</h1>
+      <p class="subtitle">Barème 2025 · Revenus 2024 · France</p>
+    </header>
+
+    <div class="form-section">
+
+      <div class="field">
+        <label for="revenu">Revenu net annuel (€)</label>
+        <input type="number" id="revenu" placeholder="Ex : 35 000" min="0" step="100">
+      </div>
+
+      <div class="field">
+        <label for="parts">Nombre de parts fiscales</label>
+        <select id="parts">
+          <option value="1">1 — Célibataire sans enfant</option>
+          <option value="1.5">1,5 — Parent isolé, 1 enfant</option>
+          <option value="2" selected>2 — Couple sans enfant</option>
+          <option value="2.5">2,5 — Couple, 1 enfant</option>
+          <option value="3">3 — Couple, 2 enfants</option>
+          <option value="4">4 — Couple, 3 enfants</option>
+          <option value="4.5">4,5 — Couple, 4 enfants</option>
+          <option value="5">5 — Couple, 5 enfants</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Situation</label>
+        <div class="radio-group">
+          <label>
+            <input type="radio" name="situation" value="seul" id="seul">
+            <span>Célibataire / Veuf / Divorcé</span>
+          </label>
+          <label>
+            <input type="radio" name="situation" value="couple" id="couple" checked>
+            <span>Marié(e) / Pacsé(e)</span>
+          </label>
+        </div>
+      </div>
+
+      <button onclick="calculer()">Calculer</button>
+    </div>
+
+    <!-- Results -->
+    <div id="results">
+      <p class="results-title">Résultats</p>
+
+      <div class="summary-grid">
+        <div class="stat">
+          <span class="stat-label">Impôt net</span>
+          <span class="stat-value accent" id="r-impot-net">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Taux moyen</span>
+          <span class="stat-value" id="r-taux-moyen">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Tranche marginale</span>
+          <span class="stat-value" id="r-taux-marginal">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Revenu imposable</span>
+          <span class="stat-value muted" id="r-revenu-imposable">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Impôt brut</span>
+          <span class="stat-value muted" id="r-impot-brut">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Décote</span>
+          <span class="stat-value muted" id="r-decote">—</span>
+        </div>
+      </div>
+
+      <p class="brackets-title">Répartition par tranche</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Tranche</th>
+            <th>Taux</th>
+            <th>Base imposée</th>
+            <th>Impôt</th>
+          </tr>
+        </thead>
+        <tbody id="brackets-body"></tbody>
+      </table>
+
+      <p class="note">
+        Simulation basée sur le barème progressif de l'impôt sur le revenu (France, 2025).<br>
+        Abattement forfaitaire de 10 % pour frais professionnels appliqué (min. 495 €, max. 14 171 €).<br>
+        Résultats indicatifs — ne tient pas compte des réductions, crédits d'impôt ni cotisations sociales.
+      </p>
+    </div>
+
+  </div>
+
+  <script>
+    const BAREME = [
+      { min: 0,      max: 11497,   taux: 0    },
+      { min: 11497,  max: 29315,   taux: 0.11 },
+      { min: 29315,  max: 83823,   taux: 0.30 },
+      { min: 83823,  max: 180294,  taux: 0.41 },
+      { min: 180294, max: Infinity, taux: 0.45 },
+    ];
+
+    const TRANCHES_LABELS = ['0 – 11 497 €', '11 497 – 29 315 €', '29 315 – 83 823 €', '83 823 – 180 294 €', '> 180 294 €'];
+
+    function fmt(n) {
+      return n.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' €';
+    }
+
+    function fmtPct(n) {
+      return n.toFixed(2).replace('.', ',') + ' %';
+    }
+
+    function calculer() {
+      const revenuNet = parseFloat(document.getElementById('revenu').value);
+      if (!revenuNet || revenuNet <= 0) {
+        alert('Veuillez saisir un revenu net annuel valide.');
+        return;
+      }
+
+      const nombreParts = parseFloat(document.getElementById('parts').value);
+      const estCouple   = document.getElementById('couple').checked;
+
+      // 1. Abattement 10 %
+      const abattement     = Math.max(495, Math.min(14171, revenuNet * 0.1));
+      const revenuImposable = Math.max(0, revenuNet - abattement);
+
+      // 2. Quotient familial
+      const quotient = revenuImposable / nombreParts;
+
+      // 3. Impôt par part + détails par tranche
+      let impotParPart = 0;
+      const details = [];
+      let tauxMarginal = 0;
+
+      for (let i = 0; i < BAREME.length; i++) {
+        const t = BAREME[i];
+        if (quotient <= t.min) {
+          details.push({ label: TRANCHES_LABELS[i], taux: t.taux, base: 0, impot: 0, active: false });
+          continue;
+        }
+        const baseParPart = Math.min(quotient, t.max) - t.min;
+        const impotTranche = baseParPart * t.taux;
+        details.push({
+          label: TRANCHES_LABELS[i],
+          taux: t.taux,
+          base: baseParPart * nombreParts,
+          impot: impotTranche * nombreParts,
+          active: baseParPart > 0,
+        });
+        impotParPart += impotTranche;
+        if (baseParPart > 0) tauxMarginal = t.taux;
+      }
+
+      // 4. Impôt brut
+      const impotBrut = impotParPart * nombreParts;
+
+      // 5. Décote
+      let decote = 0;
+      if (estCouple) {
+        if (impotBrut < 3191) decote = Math.max(0, 1444 - 0.75 * impotBrut);
+      } else {
+        if (impotBrut < 1929) decote = Math.max(0, 873  - 0.75 * impotBrut);
+      }
+
+      // 6. Impôt net
+      const impotNet  = Math.max(0, impotBrut - decote);
+      const tauxMoyen = revenuNet > 0 ? (impotNet / revenuNet) * 100 : 0;
+
+      // ── Affichage ──
+      document.getElementById('r-impot-net').textContent      = fmt(Math.round(impotNet));
+      document.getElementById('r-taux-moyen').textContent     = fmtPct(tauxMoyen);
+      document.getElementById('r-taux-marginal').textContent  = fmtPct(tauxMarginal * 100);
+      document.getElementById('r-revenu-imposable').textContent = fmt(Math.round(revenuImposable));
+      document.getElementById('r-impot-brut').textContent     = fmt(Math.round(impotBrut));
+      document.getElementById('r-decote').textContent         = decote > 0 ? '− ' + fmt(Math.round(decote)) : '—';
+
+      const tbody = document.getElementById('brackets-body');
+      tbody.innerHTML = details.map(d => `
+        <tr class="${d.active ? 'active' : ''}">
+          <td>${d.label}</td>
+          <td>${fmtPct(d.taux * 100)}</td>
+          <td>${d.base > 0 ? fmt(Math.round(d.base)) : '—'}</td>
+          <td>${d.impot > 0 ? fmt(Math.round(d.impot)) : '—'}</td>
+        </tr>
+      `).join('');
+
+      const results = document.getElementById('results');
+      results.classList.add('visible');
+      results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // Allow Enter key to trigger calculation
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter') calculer();
+    });
+  </script>
+</body>
+</html>
