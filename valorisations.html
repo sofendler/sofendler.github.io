@@ -187,6 +187,42 @@
 
     .actions { display: flex; gap: 0.4rem; justify-content: center; }
 
+    .assureur-tag {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 400;
+      color: var(--muted);
+      margin-top: 0.1rem;
+    }
+
+    /* ── Insurer group rows ── */
+    tbody tr.group-header { background: #eff6ff; }
+    tbody tr.group-header:hover { background: #eff6ff; }
+    tbody tr.group-header td {
+      padding: 0.4rem 1rem;
+      font-size: 0.76rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--primary);
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody tr.subtotal-row td {
+      padding: 0.6rem 1rem;
+      background: #f0f5ff;
+      font-weight: 600;
+      font-size: 0.85rem;
+      border-top: 1px dashed #bfdbfe;
+      border-bottom: 2px solid var(--border);
+      text-align: right;
+      white-space: nowrap;
+    }
+    tbody tr.subtotal-row td:first-child { text-align: left; }
+    tbody tr.subtotal-row td:last-child  { background: transparent; border-top: none; border-bottom: 2px solid var(--border); }
+    tbody tr.subtotal-row:hover td       { background: #e0edff; }
+    tbody tr.subtotal-row:hover td:last-child { background: transparent; }
+
     /* ── Empty state ── */
     .empty-state {
       text-align: center;
@@ -379,6 +415,11 @@
             <input type="text" id="fNom" placeholder="Ex : Assurance-vie Linxea Spirit 2" required autocomplete="off">
           </div>
 
+          <div class="form-field full">
+            <label for="fAssureur">Assureur</label>
+            <input type="text" id="fAssureur" placeholder="Ex : Spirica, Generali, Boursorama…" autocomplete="off">
+          </div>
+
           <div class="form-section-label">Valorisations annuelles</div>
 
           <div class="form-field">
@@ -498,22 +539,73 @@
       } else {
         emptyTbl.style.display = 'none';
 
-        tbody.innerHTML = data.map((asset, i) => {
-          const color = COLORS[i % COLORS.length];
-          const cells = PERIODS.map(p => `<td>${fmt(asset[p.key])}</td>`).join('');
-          return `
-            <tr>
-              <td class="contrat-name">
-                <span class="color-dot" style="background:${color}"></span>
-                ${escHtml(asset.nom)}
-              </td>
-              ${cells}
-              <td class="actions">
-                <button class="btn btn-edit btn-sm" onclick="openEditModal('${asset.id}')" title="Modifier">✏️</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteAsset('${asset.id}')" title="Supprimer">🗑️</button>
-              </td>
-            </tr>`;
-        }).join('');
+        // Stable color map by asset id
+        const colorMap = {};
+        data.forEach((a, i) => { colorMap[a.id] = COLORS[i % COLORS.length]; });
+
+        // Group by assureur, preserving insertion order within each group
+        const groupMap = new Map();
+        data.forEach(asset => {
+          const key = (asset.assureur || '').trim() || 'Non renseigné';
+          if (!groupMap.has(key)) groupMap.set(key, []);
+          groupMap.get(key).push(asset);
+        });
+
+        // Sort group keys alphabetically, push "Non renseigné" last
+        const sortedKeys = [...groupMap.keys()].sort((a, b) => {
+          if (a === 'Non renseigné') return 1;
+          if (b === 'Non renseigné') return -1;
+          return a.localeCompare(b, 'fr');
+        });
+
+        const multiGroups = groupMap.size > 1;
+        let html = '';
+
+        for (const key of sortedKeys) {
+          const contracts = groupMap.get(key);
+
+          // Group header row (only when multiple insurers)
+          if (multiGroups) {
+            html += `<tr class="group-header"><td colspan="8">${escHtml(key)}</td></tr>`;
+          }
+
+          // Contract rows
+          for (const asset of contracts) {
+            const color = colorMap[asset.id];
+            const cells = PERIODS.map(p => `<td>${fmt(asset[p.key])}</td>`).join('');
+            const assureurSub = (!multiGroups && asset.assureur)
+              ? `<small class="assureur-tag">${escHtml(asset.assureur)}</small>`
+              : '';
+            html += `
+              <tr>
+                <td class="contrat-name">
+                  <span class="color-dot" style="background:${color}"></span>
+                  <span>${escHtml(asset.nom)}${assureurSub}</span>
+                </td>
+                ${cells}
+                <td class="actions">
+                  <button class="btn btn-edit btn-sm" onclick="openEditModal('${asset.id}')" title="Modifier">✏️</button>
+                  <button class="btn btn-danger btn-sm" onclick="deleteAsset('${asset.id}')" title="Supprimer">🗑️</button>
+                </td>
+              </tr>`;
+          }
+
+          // Subtotal row (only when multiple insurers AND group has 2+ contracts)
+          if (multiGroups && contracts.length > 1) {
+            const subs = PERIODS.map(p => {
+              const vals = contracts.map(a => a[p.key]).filter(v => v !== null);
+              return vals.length ? vals.reduce((s, v) => s + v, 0) : null;
+            });
+            html += `
+              <tr class="subtotal-row">
+                <td>Sous-total ${escHtml(key)}</td>
+                ${subs.map(t => `<td>${fmt(t)}</td>`).join('')}
+                <td></td>
+              </tr>`;
+          }
+        }
+
+        tbody.innerHTML = html;
 
         // Total row
         const totals = PERIODS.map(p => {
@@ -648,14 +740,15 @@
 
       document.getElementById('modalTitle').textContent = 'Modifier le contrat';
       document.getElementById('submitBtn').textContent  = 'Enregistrer';
-      document.getElementById('fId').value      = id;
-      document.getElementById('fNom').value     = asset.nom;
-      document.getElementById('fVal2024').value = asset.val2024  ?? '';
-      document.getElementById('fVal2025').value = asset.val2025  ?? '';
-      document.getElementById('fQ1').value      = asset.q1_2026  ?? '';
-      document.getElementById('fQ2').value      = asset.q2_2026  ?? '';
-      document.getElementById('fQ3').value      = asset.q3_2026  ?? '';
-      document.getElementById('fQ4').value      = asset.q4_2026  ?? '';
+      document.getElementById('fId').value       = id;
+      document.getElementById('fNom').value      = asset.nom;
+      document.getElementById('fAssureur').value = asset.assureur ?? '';
+      document.getElementById('fVal2024').value  = asset.val2024  ?? '';
+      document.getElementById('fVal2025').value  = asset.val2025  ?? '';
+      document.getElementById('fQ1').value       = asset.q1_2026  ?? '';
+      document.getElementById('fQ2').value       = asset.q2_2026  ?? '';
+      document.getElementById('fQ3').value       = asset.q3_2026  ?? '';
+      document.getElementById('fQ4').value       = asset.q4_2026  ?? '';
       document.getElementById('modalOverlay').classList.add('open');
       document.getElementById('fNom').focus();
     }
@@ -681,8 +774,9 @@
       const id   = document.getElementById('fId').value;
 
       const patch = {
-        nom:     document.getElementById('fNom').value.trim(),
-        val2024: parseNum(document.getElementById('fVal2024').value),
+        nom:      document.getElementById('fNom').value.trim(),
+        assureur: document.getElementById('fAssureur').value.trim(),
+        val2024:  parseNum(document.getElementById('fVal2024').value),
         val2025: parseNum(document.getElementById('fVal2025').value),
         q1_2026: parseNum(document.getElementById('fQ1').value),
         q2_2026: parseNum(document.getElementById('fQ2').value),
