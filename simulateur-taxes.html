@@ -81,7 +81,7 @@
       color: #888;
     }
 
-    input[type="number"],
+    input[type="text"],
     select {
       background: transparent;
       border: none;
@@ -98,12 +98,12 @@
       -webkit-appearance: none;
     }
 
-    input[type="number"]:focus,
+    input[type="text"]:focus,
     select:focus {
       border-bottom-color: #fff;
     }
 
-    input[type="number"]::placeholder {
+    input[type="text"]::placeholder {
       color: #333;
     }
 
@@ -269,8 +269,13 @@
     <div class="form-section">
 
       <div class="field">
-        <label for="revenu">Revenu net annuel (€)</label>
-        <input type="number" id="revenu" placeholder="Ex : 35 000" min="0" step="100">
+        <label for="revenu">Revenu net annuel — salaires (€)</label>
+        <input type="text" id="revenu" placeholder="Ex : 35 000" inputmode="numeric">
+      </div>
+
+      <div class="field">
+        <label for="revenu-locatif">Revenu immobilier brut annuel (€)</label>
+        <input type="text" id="revenu-locatif" placeholder="Ex : 8 000" inputmode="numeric">
       </div>
 
       <div class="field">
@@ -333,6 +338,14 @@
           <span class="stat-label">Décote</span>
           <span class="stat-value muted" id="r-decote">—</span>
         </div>
+        <div class="stat" id="stat-foncier" style="display:none">
+          <span class="stat-label">Revenu foncier net</span>
+          <span class="stat-value muted" id="r-foncier-net">—</span>
+        </div>
+        <div class="stat" id="stat-foncier-regime" style="display:none">
+          <span class="stat-label">Régime foncier</span>
+          <span class="stat-value muted" id="r-foncier-regime">—</span>
+        </div>
       </div>
 
       <p class="brackets-title">Répartition par tranche</p>
@@ -350,7 +363,8 @@
 
       <p class="note">
         Simulation basée sur le barème progressif de l'impôt sur le revenu (France, 2025).<br>
-        Abattement forfaitaire de 10 % pour frais professionnels appliqué (min. 495 €, max. 14 171 €).<br>
+        Abattement forfaitaire de 10 % pour frais professionnels appliqué sur salaires (min. 495 €, max. 14 171 €).<br>
+        Revenus fonciers : micro-foncier (abattement 30 %) si brut ≤ 15 000 €, régime réel (montant net saisi) au-delà.<br>
         Résultats indicatifs — ne tient pas compte des réductions, crédits d'impôt ni cotisations sociales.
       </p>
     </div>
@@ -376,24 +390,59 @@
       return n.toFixed(2).replace('.', ',') + ' %';
     }
 
+    // Format a text input with spaces as thousand separators
+    function formatNumberInput(input) {
+      const cursor = input.selectionStart;
+      const prevLen = input.value.length;
+      const raw = input.value.replace(/\s/g, '').replace(/\D/g, '');
+      if (raw === '') { input.value = ''; return; }
+      const formatted = parseInt(raw, 10).toLocaleString('fr-FR');
+      input.value = formatted;
+      // Adjust cursor position after formatting
+      const diff = formatted.length - prevLen;
+      input.setSelectionRange(cursor + diff, cursor + diff);
+    }
+
+    // Parse a formatted text input to a number
+    function parseInput(id) {
+      return parseFloat(document.getElementById(id).value.replace(/\s/g, '')) || 0;
+    }
+
     function calculer() {
-      const revenuNet = parseFloat(document.getElementById('revenu').value);
+      const revenuNet = parseInput('revenu');
       if (!revenuNet || revenuNet <= 0) {
         alert('Veuillez saisir un revenu net annuel valide.');
         return;
       }
 
-      const nombreParts = parseFloat(document.getElementById('parts').value);
-      const estCouple   = document.getElementById('couple').checked;
+      const revenuLocatif = parseInput('revenu-locatif');
+      const nombreParts   = parseFloat(document.getElementById('parts').value);
+      const estCouple     = document.getElementById('couple').checked;
 
-      // 1. Abattement 10 %
-      const abattement     = Math.max(495, Math.min(14171, revenuNet * 0.1));
-      const revenuImposable = Math.max(0, revenuNet - abattement);
+      // 1. Abattement 10 % sur salaires
+      const abattement = Math.max(495, Math.min(14171, revenuNet * 0.1));
+      const revenuSalarialNet = Math.max(0, revenuNet - abattement);
 
-      // 2. Quotient familial
+      // 2. Revenu foncier
+      let revenuFoncierNet = 0;
+      let regimeFoncier = '';
+      if (revenuLocatif > 0) {
+        if (revenuLocatif <= 15000) {
+          revenuFoncierNet = revenuLocatif * 0.70; // Micro-foncier : abattement 30 %
+          regimeFoncier = 'Micro-foncier (−30 %)';
+        } else {
+          revenuFoncierNet = revenuLocatif; // Régime réel : montant net saisi
+          regimeFoncier = 'Régime réel';
+        }
+      }
+
+      // 3. Revenu imposable total
+      const revenuImposable = revenuSalarialNet + revenuFoncierNet;
+
+      // 4. Quotient familial
       const quotient = revenuImposable / nombreParts;
 
-      // 3. Impôt par part + détails par tranche
+      // 5. Impôt par part + détails par tranche
       let impotParPart = 0;
       const details = [];
       let tauxMarginal = 0;
@@ -417,10 +466,10 @@
         if (baseParPart > 0) tauxMarginal = t.taux;
       }
 
-      // 4. Impôt brut
+      // 6. Impôt brut
       const impotBrut = impotParPart * nombreParts;
 
-      // 5. Décote
+      // 7. Décote
       let decote = 0;
       if (estCouple) {
         if (impotBrut < 3191) decote = Math.max(0, 1444 - 0.75 * impotBrut);
@@ -428,17 +477,31 @@
         if (impotBrut < 1929) decote = Math.max(0, 873  - 0.75 * impotBrut);
       }
 
-      // 6. Impôt net
-      const impotNet  = Math.max(0, impotBrut - decote);
-      const tauxMoyen = revenuNet > 0 ? (impotNet / revenuNet) * 100 : 0;
+      // 8. Impôt net
+      const impotNet = Math.max(0, impotBrut - decote);
+      const revenuTotal = revenuNet + revenuLocatif;
+      const tauxMoyen = revenuTotal > 0 ? (impotNet / revenuTotal) * 100 : 0;
 
       // ── Affichage ──
-      document.getElementById('r-impot-net').textContent      = fmt(Math.round(impotNet));
-      document.getElementById('r-taux-moyen').textContent     = fmtPct(tauxMoyen);
-      document.getElementById('r-taux-marginal').textContent  = fmtPct(tauxMarginal * 100);
+      document.getElementById('r-impot-net').textContent        = fmt(Math.round(impotNet));
+      document.getElementById('r-taux-moyen').textContent       = fmtPct(tauxMoyen);
+      document.getElementById('r-taux-marginal').textContent    = fmtPct(tauxMarginal * 100);
       document.getElementById('r-revenu-imposable').textContent = fmt(Math.round(revenuImposable));
-      document.getElementById('r-impot-brut').textContent     = fmt(Math.round(impotBrut));
-      document.getElementById('r-decote').textContent         = decote > 0 ? '− ' + fmt(Math.round(decote)) : '—';
+      document.getElementById('r-impot-brut').textContent       = fmt(Math.round(impotBrut));
+      document.getElementById('r-decote').textContent           = decote > 0 ? '− ' + fmt(Math.round(decote)) : '—';
+
+      // Revenu foncier (afficher seulement si saisi)
+      const statFoncier = document.getElementById('stat-foncier');
+      const statRegime  = document.getElementById('stat-foncier-regime');
+      if (revenuLocatif > 0) {
+        document.getElementById('r-foncier-net').textContent    = fmt(Math.round(revenuFoncierNet));
+        document.getElementById('r-foncier-regime').textContent = regimeFoncier;
+        statFoncier.style.display = '';
+        statRegime.style.display  = '';
+      } else {
+        statFoncier.style.display = 'none';
+        statRegime.style.display  = 'none';
+      }
 
       const tbody = document.getElementById('brackets-body');
       tbody.innerHTML = details.map(d => `
@@ -454,6 +517,13 @@
       results.classList.add('visible');
       results.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+
+    // Format inputs on typing
+    ['revenu', 'revenu-locatif'].forEach(id => {
+      document.getElementById(id).addEventListener('input', function () {
+        formatNumberInput(this);
+      });
+    });
 
     // Allow Enter key to trigger calculation
     document.addEventListener('keydown', e => {
