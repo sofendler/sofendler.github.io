@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Valorisations des actifs financiers</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --primary:       #1e40af;
+      --primary-hover: #1e3a8a;
+      --primary-light: #3b82f6;
+      --bg:            #f1f5f9;
+      --card:          #ffffff;
+      --text:          #1e293b;
+      --muted:         #64748b;
+      --border:        #e2e8f0;
+      --danger:        #ef4444;
+      --danger-bg:     #fee2e2;
+      --edit-bg:       #eff6ff;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--primary);
+      color: white;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1.2rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    header a.back {
+      color: rgba(255,255,255,0.75);
+      text-decoration: none;
+      font-size: 0.9rem;
+      white-space: nowrap;
+      transition: color 0.15s;
+    }
+    header a.back:hover { color: white; }
+
+    header h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      flex: 1;
+    }
+
+    /* ── Layout ── */
+    main {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--card);
+      border-radius: 14px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      padding: 1.5rem 1.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .card-header h2 {
+      font-size: 1.05rem;
+      font-weight: 600;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: all 0.15s;
+      line-height: 1;
+    }
+
+    .btn-primary  { background: var(--primary); color: white; }
+    .btn-primary:hover  { background: var(--primary-hover); }
+
+    .btn-cancel   { background: var(--border); color: var(--text); }
+    .btn-cancel:hover { background: #cbd5e1; }
+
+    .btn-danger   { background: var(--danger-bg); color: var(--danger); }
+    .btn-danger:hover { background: #fecaca; }
+
+    .btn-edit     { background: var(--edit-bg); color: var(--primary); }
+    .btn-edit:hover   { background: #dbeafe; }
+
+    .btn-sm       { padding: 0.28rem 0.6rem; font-size: 0.78rem; border-radius: 6px; }
+
+    /* ── Table ── */
+    .table-wrapper { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+
+    thead th {
+      background: #f8fafc;
+      padding: 0.7rem 1rem;
+      font-weight: 600;
+      color: var(--muted);
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 2px solid var(--border);
+      white-space: nowrap;
+      text-align: left;
+    }
+
+    thead th:not(:first-child) { text-align: right; }
+
+    thead th.col-actions { text-align: center; min-width: 90px; }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
+    }
+    tbody tr:last-child  { border-bottom: none; }
+    tbody tr:hover       { background: #f8fafc; }
+
+    tbody td {
+      padding: 0.7rem 1rem;
+      white-space: nowrap;
+    }
+
+    tbody td:not(:first-child):not(:last-child) { text-align: right; }
+
+    tfoot tr td {
+      padding: 0.75rem 1rem;
+      font-weight: 700;
+      background: #f8fafc;
+      border-top: 2px solid var(--border);
+      text-align: right;
+      white-space: nowrap;
+      font-size: 0.88rem;
+    }
+    tfoot tr td:first-child { text-align: left; }
+    tfoot tr td:last-child  { background: transparent; border-top: none; }
+
+    .contrat-name {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      font-weight: 500;
+    }
+
+    .color-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .null-val { color: #cbd5e1; }
+
+    .actions { display: flex; gap: 0.4rem; justify-content: center; }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1.5rem;
+      color: var(--muted);
+    }
+    .empty-state .icon { font-size: 2.8rem; margin-bottom: 0.75rem; }
+    .empty-state p     { font-size: 0.95rem; }
+
+    /* ── Chart ── */
+    .chart-container {
+      position: relative;
+      height: 400px;
+    }
+    #myChart { position: absolute; inset: 0; }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15,23,42,0.45);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .modal-overlay.open { display: flex; }
+
+    .modal {
+      background: white;
+      border-radius: 16px;
+      padding: 2rem;
+      width: min(520px, 100%);
+      box-shadow: 0 24px 64px rgba(0,0,0,0.18);
+      animation: slideUp 0.2s ease;
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .modal-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 1.5rem;
+      color: var(--text);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.9rem;
+    }
+
+    .form-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .form-field.full { grid-column: 1 / -1; }
+
+    .form-field label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .form-field input {
+      padding: 0.6rem 0.75rem;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.925rem;
+      color: var(--text);
+      width: 100%;
+      transition: border-color 0.15s;
+      background: #fdfdfd;
+    }
+    .form-field input:focus {
+      outline: none;
+      border-color: var(--primary-light);
+      background: white;
+    }
+    .form-field input[type="number"] { text-align: right; }
+
+    .form-hint {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 0.2rem;
+    }
+
+    .form-section-label {
+      grid-column: 1 / -1;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.4rem;
+      margin-top: 0.3rem;
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: flex-end;
+      margin-top: 1.5rem;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      main { padding: 1rem; }
+      .form-grid { grid-template-columns: 1fr; }
+      .form-field.full { grid-column: auto; }
+      .form-section-label { grid-column: auto; }
+      header h1 { font-size: 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <a href="index.html" class="back">← Accueil</a>
+    <h1>Valorisations des actifs financiers</h1>
+  </header>
+
+  <main>
+
+    <!-- ── Table card ── -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Mes contrats</h2>
+        <button class="btn btn-primary" onclick="openAddModal()">+ Ajouter un contrat</button>
+      </div>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th style="min-width:180px">Contrat</th>
+              <th>2024</th>
+              <th>2025</th>
+              <th>T1&nbsp;2026</th>
+              <th>T2&nbsp;2026</th>
+              <th>T3&nbsp;2026</th>
+              <th>T4&nbsp;2026</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+          <tfoot id="tableFoot"></tfoot>
+        </table>
+        <div id="emptyTable" class="empty-state">
+          <div class="icon">📂</div>
+          <p>Aucun contrat enregistré.<br>Cliquez sur <strong>+ Ajouter un contrat</strong> pour commencer.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Chart card ── -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Évolution des valorisations</h2>
+      </div>
+      <div class="chart-container">
+        <canvas id="myChart"></canvas>
+        <div id="emptyChart" class="empty-state">
+          <div class="icon">📈</div>
+          <p>Renseignez des valorisations pour afficher le graphique.</p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ── Modal ── -->
+  <div class="modal-overlay" id="modalOverlay" onclick="onOverlayClick(event)">
+    <div class="modal">
+      <div class="modal-title" id="modalTitle">Ajouter un contrat</div>
+      <form id="contractForm" onsubmit="saveContract(event)">
+        <input type="hidden" id="fId">
+        <div class="form-grid">
+
+          <div class="form-field full">
+            <label for="fNom">Nom du contrat</label>
+            <input type="text" id="fNom" placeholder="Ex : Assurance-vie Linxea Spirit 2" required autocomplete="off">
+          </div>
+
+          <div class="form-section-label">Valorisations annuelles</div>
+
+          <div class="form-field">
+            <label for="fVal2024">2024</label>
+            <input type="number" id="fVal2024" placeholder="Ex : 12 500" step="0.01" min="0">
+          </div>
+          <div class="form-field">
+            <label for="fVal2025">2025</label>
+            <input type="number" id="fVal2025" placeholder="Ex : 13 800" step="0.01" min="0">
+          </div>
+
+          <div class="form-section-label">Trimestriels 2026</div>
+
+          <div class="form-field">
+            <label for="fQ1">T1 2026 (31 mars)</label>
+            <input type="number" id="fQ1" placeholder="Ex : 14 200" step="0.01" min="0">
+          </div>
+          <div class="form-field">
+            <label for="fQ2">T2 2026 (30 juin)</label>
+            <input type="number" id="fQ2" placeholder="Ex : 14 800" step="0.01" min="0">
+          </div>
+          <div class="form-field">
+            <label for="fQ3">T3 2026 (30 sept.)</label>
+            <input type="number" id="fQ3" placeholder="" step="0.01" min="0">
+          </div>
+          <div class="form-field">
+            <label for="fQ4">T4 2026 (31 déc.)</label>
+            <input type="number" id="fQ4" placeholder="" step="0.01" min="0">
+          </div>
+
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-cancel" onclick="closeModal()">Annuler</button>
+          <button type="submit" class="btn btn-primary" id="submitBtn">Ajouter</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    /* ─────────────────────────────────────────
+       Constants & helpers
+    ───────────────────────────────────────── */
+    const STORAGE_KEY = 'actifs_financiers_v1';
+
+    const PERIODS = [
+      { key: 'val2024',  label: '2024'    },
+      { key: 'val2025',  label: '2025'    },
+      { key: 'q1_2026',  label: 'T1 2026' },
+      { key: 'q2_2026',  label: 'T2 2026' },
+      { key: 'q3_2026',  label: 'T3 2026' },
+      { key: 'q4_2026',  label: 'T4 2026' },
+    ];
+
+    const COLORS = [
+      '#2563eb','#dc2626','#16a34a','#d97706','#7c3aed',
+      '#db2777','#0891b2','#65a30d','#ea580c','#6366f1',
+      '#0d9488','#92400e',
+    ];
+
+    function parseNum(v) {
+      if (v === '' || v === null || v === undefined) return null;
+      const n = parseFloat(String(v).replace(',', '.'));
+      return isNaN(n) ? null : n;
+    }
+
+    function fmt(v) {
+      if (v === null || v === undefined) return '<span class="null-val">—</span>';
+      return new Intl.NumberFormat('fr-FR', {
+        style: 'currency', currency: 'EUR', maximumFractionDigits: 0,
+      }).format(v);
+    }
+
+    function fmtPlain(v) {
+      if (v === null || v === undefined) return '—';
+      return new Intl.NumberFormat('fr-FR', {
+        style: 'currency', currency: 'EUR', maximumFractionDigits: 0,
+      }).format(v);
+    }
+
+    function escHtml(str) {
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    function uid() {
+      return Date.now().toString(36) + Math.random().toString(36).slice(2);
+    }
+
+    /* ─────────────────────────────────────────
+       Data layer
+    ───────────────────────────────────────── */
+    function getData() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+      catch { return []; }
+    }
+
+    function setData(arr) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+      render();
+    }
+
+    /* ─────────────────────────────────────────
+       Render table
+    ───────────────────────────────────────── */
+    function render() {
+      const data      = getData();
+      const tbody     = document.getElementById('tableBody');
+      const tfoot     = document.getElementById('tableFoot');
+      const emptyTbl  = document.getElementById('emptyTable');
+
+      if (data.length === 0) {
+        tbody.innerHTML = '';
+        tfoot.innerHTML = '';
+        emptyTbl.style.display = 'block';
+      } else {
+        emptyTbl.style.display = 'none';
+
+        tbody.innerHTML = data.map((asset, i) => {
+          const color = COLORS[i % COLORS.length];
+          const cells = PERIODS.map(p => `<td>${fmt(asset[p.key])}</td>`).join('');
+          return `
+            <tr>
+              <td class="contrat-name">
+                <span class="color-dot" style="background:${color}"></span>
+                ${escHtml(asset.nom)}
+              </td>
+              ${cells}
+              <td class="actions">
+                <button class="btn btn-edit btn-sm" onclick="openEditModal('${asset.id}')" title="Modifier">✏️</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteAsset('${asset.id}')" title="Supprimer">🗑️</button>
+              </td>
+            </tr>`;
+        }).join('');
+
+        // Total row
+        const totals = PERIODS.map(p => {
+          const vals = data.map(a => a[p.key]).filter(v => v !== null);
+          return vals.length ? vals.reduce((s, v) => s + v, 0) : null;
+        });
+        const totalCells = totals.map(t => `<td>${fmt(t)}</td>`).join('');
+        tfoot.innerHTML = `
+          <tr>
+            <td>Total portefeuille</td>
+            ${totalCells}
+            <td></td>
+          </tr>`;
+      }
+
+      renderChart(data);
+    }
+
+    /* ─────────────────────────────────────────
+       Render chart
+    ───────────────────────────────────────── */
+    let chartInstance = null;
+
+    function renderChart(data) {
+      const canvas     = document.getElementById('myChart');
+      const emptyChart = document.getElementById('emptyChart');
+
+      const hasData = data.length > 0 && data.some(a =>
+        PERIODS.some(p => a[p.key] !== null)
+      );
+
+      if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+
+      if (!hasData) {
+        emptyChart.style.display = 'block';
+        canvas.style.display     = 'none';
+        return;
+      }
+
+      emptyChart.style.display = 'none';
+      canvas.style.display     = 'block';
+
+      const labels = PERIODS.map(p => p.label);
+
+      const datasets = data.map((asset, i) => ({
+        label:           asset.nom,
+        data:            PERIODS.map(p => asset[p.key]),
+        borderColor:     COLORS[i % COLORS.length],
+        backgroundColor: COLORS[i % COLORS.length] + '18',
+        borderWidth:     2.5,
+        tension:         0.35,
+        pointRadius:     5,
+        pointHoverRadius:8,
+        spanGaps:        false,
+        fill:            false,
+      }));
+
+      // Total line (only if multiple assets)
+      if (data.length > 1) {
+        const totals = PERIODS.map(p => {
+          const vals = data.map(a => a[p.key]).filter(v => v !== null);
+          return vals.length === data.length ? vals.reduce((s, v) => s + v, 0) : null;
+        });
+        if (totals.some(v => v !== null)) {
+          datasets.push({
+            label:           'Total portefeuille',
+            data:            totals,
+            borderColor:     '#0f172a',
+            backgroundColor: 'transparent',
+            borderWidth:     2.5,
+            borderDash:      [6, 4],
+            tension:         0.35,
+            pointRadius:     5,
+            pointHoverRadius:8,
+            spanGaps:        false,
+            fill:            false,
+          });
+        }
+      }
+
+      const ctx = canvas.getContext('2d');
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive:          true,
+          maintainAspectRatio: false,
+          interaction:         { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { boxWidth: 14, padding: 18, font: { size: 13 } },
+            },
+            tooltip: {
+              callbacks: {
+                label: ctx => ctx.raw === null
+                  ? null
+                  : ` ${ctx.dataset.label} : ${fmtPlain(ctx.raw)}`,
+              },
+            },
+          },
+          scales: {
+            y: {
+              beginAtZero: false,
+              ticks: {
+                callback: v => fmtPlain(v),
+                maxTicksLimit: 8,
+              },
+              grid: { color: '#f1f5f9' },
+            },
+            x: { grid: { display: false } },
+          },
+        },
+      });
+    }
+
+    /* ─────────────────────────────────────────
+       Modal
+    ───────────────────────────────────────── */
+    function openAddModal() {
+      document.getElementById('modalTitle').textContent = 'Ajouter un contrat';
+      document.getElementById('submitBtn').textContent  = 'Ajouter';
+      document.getElementById('fId').value = '';
+      document.getElementById('contractForm').reset();
+      document.getElementById('modalOverlay').classList.add('open');
+      document.getElementById('fNom').focus();
+    }
+
+    function openEditModal(id) {
+      const asset = getData().find(a => a.id === id);
+      if (!asset) return;
+
+      document.getElementById('modalTitle').textContent = 'Modifier le contrat';
+      document.getElementById('submitBtn').textContent  = 'Enregistrer';
+      document.getElementById('fId').value      = id;
+      document.getElementById('fNom').value     = asset.nom;
+      document.getElementById('fVal2024').value = asset.val2024  ?? '';
+      document.getElementById('fVal2025').value = asset.val2025  ?? '';
+      document.getElementById('fQ1').value      = asset.q1_2026  ?? '';
+      document.getElementById('fQ2').value      = asset.q2_2026  ?? '';
+      document.getElementById('fQ3').value      = asset.q3_2026  ?? '';
+      document.getElementById('fQ4').value      = asset.q4_2026  ?? '';
+      document.getElementById('modalOverlay').classList.add('open');
+      document.getElementById('fNom').focus();
+    }
+
+    function closeModal() {
+      document.getElementById('modalOverlay').classList.remove('open');
+    }
+
+    function onOverlayClick(e) {
+      if (e.target === document.getElementById('modalOverlay')) closeModal();
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeModal();
+    });
+
+    /* ─────────────────────────────────────────
+       CRUD
+    ───────────────────────────────────────── */
+    function saveContract(e) {
+      e.preventDefault();
+      const data = getData();
+      const id   = document.getElementById('fId').value;
+
+      const patch = {
+        nom:     document.getElementById('fNom').value.trim(),
+        val2024: parseNum(document.getElementById('fVal2024').value),
+        val2025: parseNum(document.getElementById('fVal2025').value),
+        q1_2026: parseNum(document.getElementById('fQ1').value),
+        q2_2026: parseNum(document.getElementById('fQ2').value),
+        q3_2026: parseNum(document.getElementById('fQ3').value),
+        q4_2026: parseNum(document.getElementById('fQ4').value),
+      };
+
+      if (id) {
+        const idx = data.findIndex(a => a.id === id);
+        if (idx !== -1) data[idx] = { ...data[idx], ...patch };
+      } else {
+        data.push({ id: uid(), ...patch });
+      }
+
+      setData(data);
+      closeModal();
+    }
+
+    function deleteAsset(id) {
+      if (!confirm('Supprimer ce contrat définitivement ?')) return;
+      setData(getData().filter(a => a.id !== id));
+    }
+
+    /* ─────────────────────────────────────────
+       Init
+    ───────────────────────────────────────── */
+    render();
+  </script>
+</body>
+</html>
