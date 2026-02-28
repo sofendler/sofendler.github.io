@@ -235,9 +235,45 @@
     /* ── Chart ── */
     .chart-container {
       position: relative;
-      height: 400px;
+      height: 360px;
     }
-    #myChart { position: absolute; inset: 0; }
+    #chartTotal { position: absolute; inset: 0; }
+
+    /* ── Charts grid (per contract) ── */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 1.25rem;
+    }
+
+    .chart-item {
+      background: #f8fafc;
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      border: 1px solid var(--border);
+    }
+
+    .chart-item-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .chart-item-title small {
+      font-weight: 400;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .chart-item-container {
+      position: relative;
+      height: 200px;
+    }
 
     /* ── Modal ── */
     .modal-overlay {
@@ -343,6 +379,7 @@
       .form-field.full { grid-column: auto; }
       .form-section-label { grid-column: auto; }
       header h1 { font-size: 1rem; }
+      .charts-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -386,18 +423,26 @@
       </div>
     </div>
 
-    <!-- ── Chart card ── -->
+    <!-- ── Total chart card ── -->
     <div class="card">
       <div class="card-header">
-        <h2>Évolution des valorisations</h2>
+        <h2>Total portefeuille</h2>
       </div>
       <div class="chart-container">
-        <canvas id="myChart"></canvas>
-        <div id="emptyChart" class="empty-state">
+        <canvas id="chartTotal"></canvas>
+        <div id="emptyChartTotal" class="empty-state">
           <div class="icon">📈</div>
           <p>Renseignez des valorisations pour afficher le graphique.</p>
         </div>
       </div>
+    </div>
+
+    <!-- ── Per-contract charts card ── -->
+    <div class="card" id="contractChartsCard" style="display:none">
+      <div class="card-header">
+        <h2>Par contrat</h2>
+      </div>
+      <div class="charts-grid" id="contractChartsGrid"></div>
     </div>
 
   </main>
@@ -625,100 +670,138 @@
     }
 
     /* ─────────────────────────────────────────
-       Render chart
+       Render charts (total + per contract)
     ───────────────────────────────────────── */
-    let chartInstance = null;
+    const chartInstances = {};
+
+    function destroyAllCharts() {
+      Object.values(chartInstances).forEach(c => { if (c) c.destroy(); });
+      Object.keys(chartInstances).forEach(k => delete chartInstances[k]);
+    }
+
+    function sharedOptions(tooltipLabel, maxTicks) {
+      return {
+        responsive:          true,
+        maintainAspectRatio: false,
+        interaction:         { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => ctx.raw === null ? null : ` ${tooltipLabel ? tooltipLabel + ' : ' : ''}${fmtPlain(ctx.raw)}`,
+            },
+          },
+        },
+        scales: {
+          y: {
+            beginAtZero: false,
+            ticks: { callback: v => fmtPlain(v), maxTicksLimit: maxTicks || 6 },
+            grid: { color: '#f1f5f9' },
+          },
+          x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+        },
+      };
+    }
 
     function renderChart(data) {
-      const canvas     = document.getElementById('myChart');
-      const emptyChart = document.getElementById('emptyChart');
+      destroyAllCharts();
 
       const hasData = data.length > 0 && data.some(a =>
         PERIODS.some(p => a[p.key] !== null)
       );
 
-      if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+      /* ── Total chart ── */
+      const canvasTotal = document.getElementById('chartTotal');
+      const emptyTotal  = document.getElementById('emptyChartTotal');
 
       if (!hasData) {
-        emptyChart.style.display = 'block';
-        canvas.style.display     = 'none';
+        emptyTotal.style.display  = 'block';
+        canvasTotal.style.display = 'none';
+      } else {
+        emptyTotal.style.display  = 'none';
+        canvasTotal.style.display = 'block';
+
+        const totals = PERIODS.map(p => {
+          const vals = data.map(a => a[p.key]).filter(v => v !== null);
+          return vals.length ? vals.reduce((s, v) => s + v, 0) : null;
+        });
+
+        chartInstances['total'] = new Chart(canvasTotal.getContext('2d'), {
+          type: 'line',
+          data: {
+            labels: PERIODS.map(p => p.label),
+            datasets: [{
+              label:           'Total portefeuille',
+              data:            totals,
+              borderColor:     '#1e40af',
+              backgroundColor: '#1e40af15',
+              borderWidth:     3,
+              tension:         0.35,
+              pointRadius:     5,
+              pointHoverRadius:8,
+              spanGaps:        false,
+              fill:            true,
+            }],
+          },
+          options: sharedOptions('Total', 7),
+        });
+      }
+
+      /* ── Per-contract charts ── */
+      const chartsCard = document.getElementById('contractChartsCard');
+      const grid       = document.getElementById('contractChartsGrid');
+
+      if (!hasData) {
+        chartsCard.style.display = 'none';
+        grid.innerHTML = '';
         return;
       }
 
-      emptyChart.style.display = 'none';
-      canvas.style.display     = 'block';
+      chartsCard.style.display = 'block';
 
-      const labels = PERIODS.map(p => p.label);
+      const colorMap = {};
+      data.forEach((a, i) => { colorMap[a.id] = COLORS[i % COLORS.length]; });
 
-      const datasets = data.map((asset, i) => ({
-        label:           asset.nom,
-        data:            PERIODS.map(p => asset[p.key]),
-        borderColor:     COLORS[i % COLORS.length],
-        backgroundColor: COLORS[i % COLORS.length] + '18',
-        borderWidth:     2.5,
-        tension:         0.35,
-        pointRadius:     5,
-        pointHoverRadius:8,
-        spanGaps:        false,
-        fill:            false,
-      }));
+      // Build mini-chart cards
+      grid.innerHTML = data.map(asset => {
+        const color      = colorMap[asset.id];
+        const assureurTxt = asset.assureur ? ` — <small>${escHtml(asset.assureur)}</small>` : '';
+        return `
+          <div class="chart-item">
+            <div class="chart-item-title">
+              <span class="color-dot" style="background:${color}"></span>
+              ${escHtml(asset.nom)}${assureurTxt}
+            </div>
+            <div class="chart-item-container">
+              <canvas id="chart-${asset.id}"></canvas>
+            </div>
+          </div>`;
+      }).join('');
 
-      // Total line (only if multiple assets)
-      if (data.length > 1) {
-        const totals = PERIODS.map(p => {
-          const vals = data.map(a => a[p.key]).filter(v => v !== null);
-          return vals.length === data.length ? vals.reduce((s, v) => s + v, 0) : null;
+      // Instantiate one Chart.js per contract
+      data.forEach(asset => {
+        const canvas = document.getElementById(`chart-${asset.id}`);
+        if (!canvas) return;
+        const color = colorMap[asset.id];
+        chartInstances[asset.id] = new Chart(canvas.getContext('2d'), {
+          type: 'line',
+          data: {
+            labels: PERIODS.map(p => p.label),
+            datasets: [{
+              label:           asset.nom,
+              data:            PERIODS.map(p => asset[p.key]),
+              borderColor:     color,
+              backgroundColor: color + '20',
+              borderWidth:     2.5,
+              tension:         0.35,
+              pointRadius:     5,
+              pointHoverRadius:8,
+              spanGaps:        false,
+              fill:            true,
+            }],
+          },
+          options: sharedOptions('', 5),
         });
-        if (totals.some(v => v !== null)) {
-          datasets.push({
-            label:           'Total portefeuille',
-            data:            totals,
-            borderColor:     '#0f172a',
-            backgroundColor: 'transparent',
-            borderWidth:     2.5,
-            borderDash:      [6, 4],
-            tension:         0.35,
-            pointRadius:     5,
-            pointHoverRadius:8,
-            spanGaps:        false,
-            fill:            false,
-          });
-        }
-      }
-
-      const ctx = canvas.getContext('2d');
-      chartInstance = new Chart(ctx, {
-        type: 'line',
-        data: { labels, datasets },
-        options: {
-          responsive:          true,
-          maintainAspectRatio: false,
-          interaction:         { mode: 'index', intersect: false },
-          plugins: {
-            legend: {
-              position: 'bottom',
-              labels: { boxWidth: 14, padding: 18, font: { size: 13 } },
-            },
-            tooltip: {
-              callbacks: {
-                label: ctx => ctx.raw === null
-                  ? null
-                  : ` ${ctx.dataset.label} : ${fmtPlain(ctx.raw)}`,
-              },
-            },
-          },
-          scales: {
-            y: {
-              beginAtZero: false,
-              ticks: {
-                callback: v => fmtPlain(v),
-                maxTicksLimit: 8,
-              },
-              grid: { color: '#f1f5f9' },
-            },
-            x: { grid: { display: false } },
-          },
-        },
       });
     }
 
