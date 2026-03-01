@@ -187,12 +187,28 @@
 
     .actions { display: flex; gap: 0.4rem; justify-content: center; }
 
+    .contract-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      margin-top: 0.2rem;
+      flex-wrap: wrap;
+    }
+
+    .env-badge {
+      display: inline-block;
+      font-size: 0.67rem;
+      font-weight: 700;
+      padding: 0.12rem 0.42rem;
+      border-radius: 4px;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+    }
+
     .assureur-tag {
-      display: block;
       font-size: 0.72rem;
       font-weight: 400;
       color: var(--muted);
-      margin-top: 0.1rem;
     }
 
     /* ── Insurer group rows ── */
@@ -237,7 +253,8 @@
       position: relative;
       height: 360px;
     }
-    #chartTotal { position: absolute; inset: 0; }
+    #chartTotal,
+    #chartEnveloppe { position: absolute; inset: 0; }
 
     /* ── Charts grid (per contract) ── */
     .charts-grid {
@@ -330,7 +347,8 @@
       letter-spacing: 0.05em;
     }
 
-    .form-field input {
+    .form-field input,
+    .form-field select {
       padding: 0.6rem 0.75rem;
       border: 1.5px solid var(--border);
       border-radius: 8px;
@@ -339,12 +357,15 @@
       width: 100%;
       transition: border-color 0.15s;
       background: #fdfdfd;
+      font-family: inherit;
     }
-    .form-field input:focus {
+    .form-field input:focus,
+    .form-field select:focus {
       outline: none;
       border-color: var(--primary-light);
       background: white;
     }
+    .form-field select { cursor: pointer; }
     .form-field input[type="number"] { text-align: right; }
 
     .form-hint {
@@ -445,6 +466,20 @@
       <div class="charts-grid" id="contractChartsGrid"></div>
     </div>
 
+    <!-- ── Enveloppe stacked bar chart card ── -->
+    <div class="card" id="enveloppeChartCard" style="display:none">
+      <div class="card-header">
+        <h2>Par enveloppe fiscale</h2>
+      </div>
+      <div class="chart-container">
+        <canvas id="chartEnveloppe"></canvas>
+        <div id="emptyChartEnveloppe" class="empty-state">
+          <div class="icon">📊</div>
+          <p>Renseignez une enveloppe fiscale sur vos contrats pour afficher ce graphique.</p>
+        </div>
+      </div>
+    </div>
+
   </main>
 
   <!-- ── Modal ── -->
@@ -460,9 +495,19 @@
             <input type="text" id="fNom" placeholder="Ex : Assurance-vie Linxea Spirit 2" required autocomplete="off">
           </div>
 
-          <div class="form-field full">
+          <div class="form-field">
             <label for="fAssureur">Assureur</label>
-            <input type="text" id="fAssureur" placeholder="Ex : Spirica, Generali, Boursorama…" autocomplete="off">
+            <input type="text" id="fAssureur" placeholder="Ex : Spirica, Generali…" autocomplete="off">
+          </div>
+
+          <div class="form-field">
+            <label for="fEnveloppe">Enveloppe fiscale</label>
+            <select id="fEnveloppe">
+              <option value="">— Choisir —</option>
+              <option value="Assurance vie">Assurance vie</option>
+              <option value="PER">PER</option>
+              <option value="Compte-titres">Compte-titres</option>
+            </select>
           </div>
 
           <div class="form-section-label">Valorisations annuelles</div>
@@ -524,6 +569,21 @@
       '#db2777','#0891b2','#65a30d','#ea580c','#6366f1',
       '#0d9488','#92400e',
     ];
+
+    const ENVELOPPES = [
+      { key: 'Assurance vie', color: '#0891b2', bg: '#cffafe', text: '#0e7490' },
+      { key: 'PER',           color: '#7c3aed', bg: '#ede9fe', text: '#6d28d9' },
+      { key: 'Compte-titres', color: '#d97706', bg: '#fef3c7', text: '#92400e' },
+    ];
+    const ENV_MAP = Object.fromEntries(ENVELOPPES.map(e => [e.key, e]));
+
+    function envBadge(enveloppe) {
+      if (!enveloppe) return '';
+      const e = ENV_MAP[enveloppe];
+      const bg   = e ? e.bg   : '#f1f5f9';
+      const text = e ? e.text : '#64748b';
+      return `<span class="env-badge" style="background:${bg};color:${text}">${escHtml(enveloppe)}</span>`;
+    }
 
     function parseNum(v) {
       if (v === '' || v === null || v === undefined) return null;
@@ -618,14 +678,15 @@
           for (const asset of contracts) {
             const color = colorMap[asset.id];
             const cells = PERIODS.map(p => `<td>${fmt(asset[p.key])}</td>`).join('');
-            const assureurSub = (!multiGroups && asset.assureur)
-              ? `<small class="assureur-tag">${escHtml(asset.assureur)}</small>`
-              : '';
+            const metaParts = [];
+            if (asset.enveloppe) metaParts.push(envBadge(asset.enveloppe));
+            if (!multiGroups && asset.assureur) metaParts.push(`<span class="assureur-tag">${escHtml(asset.assureur)}</span>`);
+            const metaHtml = metaParts.length ? `<span class="contract-meta">${metaParts.join('')}</span>` : '';
             html += `
               <tr>
                 <td class="contrat-name">
                   <span class="color-dot" style="background:${color}"></span>
-                  <span>${escHtml(asset.nom)}${assureurSub}</span>
+                  <span>${escHtml(asset.nom)}${metaHtml}</span>
                 </td>
                 ${cells}
                 <td class="actions">
@@ -803,6 +864,100 @@
           options: sharedOptions('', 5),
         });
       });
+
+      renderEnveloppeChart(data);
+    }
+
+    /* ─────────────────────────────────────────
+       Stacked bar chart — par enveloppe fiscale
+    ───────────────────────────────────────── */
+    function renderEnveloppeChart(data) {
+      const card   = document.getElementById('enveloppeChartCard');
+      const canvas = document.getElementById('chartEnveloppe');
+      const empty  = document.getElementById('emptyChartEnveloppe');
+
+      const hasEnv = data.some(a => a.enveloppe && PERIODS.some(p => a[p.key] !== null));
+
+      if (!hasEnv) {
+        card.style.display = 'none';
+        return;
+      }
+
+      card.style.display   = 'block';
+      empty.style.display  = 'none';
+      canvas.style.display = 'block';
+
+      // Build one dataset per envelope type (only those present in data)
+      const datasets = ENVELOPPES.map(env => {
+        const contracts = data.filter(a => a.enveloppe === env.key);
+        if (!contracts.length) return null;
+
+        const values = PERIODS.map(p => {
+          const vals = contracts.map(a => a[p.key]).filter(v => v !== null);
+          return vals.length ? vals.reduce((s, v) => s + v, 0) : null;
+        });
+        if (values.every(v => v === null)) return null;
+
+        return {
+          label:           env.key,
+          data:            values,
+          backgroundColor: env.color + 'cc',
+          borderColor:     env.color,
+          borderWidth:     1,
+          borderRadius:    3,
+          stack:           'enveloppe',
+        };
+      }).filter(Boolean);
+
+      // Contracts without enveloppe → "Non renseigné"
+      const noEnv = data.filter(a => !a.enveloppe);
+      if (noEnv.length) {
+        const values = PERIODS.map(p => {
+          const vals = noEnv.map(a => a[p.key]).filter(v => v !== null);
+          return vals.length ? vals.reduce((s, v) => s + v, 0) : null;
+        });
+        if (values.some(v => v !== null)) {
+          datasets.push({
+            label:           'Non renseigné',
+            data:            values,
+            backgroundColor: '#94a3b8cc',
+            borderColor:     '#94a3b8',
+            borderWidth:     1,
+            borderRadius:    3,
+            stack:           'enveloppe',
+          });
+        }
+      }
+
+      chartInstances['enveloppe'] = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: { labels: PERIODS.map(p => p.label), datasets },
+        options: {
+          responsive:          true,
+          maintainAspectRatio: false,
+          interaction:         { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { boxWidth: 14, padding: 18, font: { size: 13 } },
+            },
+            tooltip: {
+              callbacks: {
+                label: ctx => ctx.raw === null ? null : ` ${ctx.dataset.label} : ${fmtPlain(ctx.raw)}`,
+              },
+            },
+          },
+          scales: {
+            x: { stacked: true, grid: { display: false } },
+            y: {
+              stacked: true,
+              beginAtZero: true,
+              ticks: { callback: v => fmtPlain(v), maxTicksLimit: 7 },
+              grid: { color: '#f1f5f9' },
+            },
+          },
+        },
+      });
     }
 
     /* ─────────────────────────────────────────
@@ -823,10 +978,11 @@
 
       document.getElementById('modalTitle').textContent = 'Modifier le contrat';
       document.getElementById('submitBtn').textContent  = 'Enregistrer';
-      document.getElementById('fId').value       = id;
-      document.getElementById('fNom').value      = asset.nom;
-      document.getElementById('fAssureur').value = asset.assureur ?? '';
-      document.getElementById('fVal2024').value  = asset.val2024  ?? '';
+      document.getElementById('fId').value        = id;
+      document.getElementById('fNom').value       = asset.nom;
+      document.getElementById('fAssureur').value  = asset.assureur  ?? '';
+      document.getElementById('fEnveloppe').value = asset.enveloppe ?? '';
+      document.getElementById('fVal2024').value   = asset.val2024   ?? '';
       document.getElementById('fVal2025').value  = asset.val2025  ?? '';
       document.getElementById('fQ1').value       = asset.q1_2026  ?? '';
       document.getElementById('fQ2').value       = asset.q2_2026  ?? '';
@@ -857,9 +1013,10 @@
       const id   = document.getElementById('fId').value;
 
       const patch = {
-        nom:      document.getElementById('fNom').value.trim(),
-        assureur: document.getElementById('fAssureur').value.trim(),
-        val2024:  parseNum(document.getElementById('fVal2024').value),
+        nom:       document.getElementById('fNom').value.trim(),
+        assureur:  document.getElementById('fAssureur').value.trim(),
+        enveloppe: document.getElementById('fEnveloppe').value,
+        val2024:   parseNum(document.getElementById('fVal2024').value),
         val2025: parseNum(document.getElementById('fVal2025').value),
         q1_2026: parseNum(document.getElementById('fQ1').value),
         q2_2026: parseNum(document.getElementById('fQ2').value),
