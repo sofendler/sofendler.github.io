@@ -254,7 +254,8 @@
       height: 360px;
     }
     #chartTotal,
-    #chartEnveloppe { position: absolute; inset: 0; }
+    #chartEnveloppe,
+    #chartAv { position: absolute; inset: 0; }
 
     /* ── Charts grid (per contract) ── */
     .charts-grid {
@@ -464,6 +465,20 @@
         <h2>Par contrat</h2>
       </div>
       <div class="charts-grid" id="contractChartsGrid"></div>
+    </div>
+
+    <!-- ── Assurance vie stacked bar chart card ── -->
+    <div class="card" id="avChartCard" style="display:none">
+      <div class="card-header">
+        <h2>Assurance vie — détail par contrat</h2>
+      </div>
+      <div class="chart-container">
+        <canvas id="chartAv"></canvas>
+        <div id="emptyChartAv" class="empty-state" style="display:none">
+          <div class="icon">📊</div>
+          <p>Aucun contrat d'assurance vie avec des valorisations renseignées.</p>
+        </div>
+      </div>
     </div>
 
     <!-- ── Enveloppe stacked bar chart card ── -->
@@ -865,7 +880,72 @@
         });
       });
 
+      renderAvChart(data);
       renderEnveloppeChart(data);
+    }
+
+    /* ─────────────────────────────────────────
+       Stacked bar chart — contrats AV
+    ───────────────────────────────────────── */
+    function renderAvChart(data) {
+      const card   = document.getElementById('avChartCard');
+      const canvas = document.getElementById('chartAv');
+      const empty  = document.getElementById('emptyChartAv');
+
+      const avContracts = data.filter(a => a.enveloppe === 'Assurance vie'
+        && PERIODS.some(p => a[p.key] !== null));
+
+      if (!avContracts.length) {
+        card.style.display = 'none';
+        return;
+      }
+
+      card.style.display   = 'block';
+      empty.style.display  = 'none';
+      canvas.style.display = 'block';
+
+      const colorMap = {};
+      data.forEach((a, i) => { colorMap[a.id] = COLORS[i % COLORS.length]; });
+
+      const datasets = avContracts.map(asset => ({
+        label:           asset.nom,
+        data:            PERIODS.map(p => asset[p.key]),
+        backgroundColor: colorMap[asset.id] + 'cc',
+        borderColor:     colorMap[asset.id],
+        borderWidth:     1,
+        borderRadius:    3,
+        stack:           'av',
+      }));
+
+      chartInstances['av'] = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: { labels: PERIODS.map(p => p.label), datasets },
+        options: {
+          responsive:          true,
+          maintainAspectRatio: false,
+          interaction:         { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { boxWidth: 14, padding: 18, font: { size: 13 } },
+            },
+            tooltip: {
+              callbacks: {
+                label: ctx => ctx.raw === null ? null : ` ${ctx.dataset.label} : ${fmtPlain(ctx.raw)}`,
+              },
+            },
+          },
+          scales: {
+            x: { stacked: true, grid: { display: false } },
+            y: {
+              stacked: true,
+              beginAtZero: true,
+              ticks: { callback: v => fmtPlain(v), maxTicksLimit: 7 },
+              grid: { color: '#f1f5f9' },
+            },
+          },
+        },
+      });
     }
 
     /* ─────────────────────────────────────────
